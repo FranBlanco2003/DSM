@@ -1,0 +1,73 @@
+-- @nsURI UmlMm=http://DSM/DC_UML
+-- @nsURI ErMm=http://DSM/ER_2025
+
+module T4;
+create OUT : ErMm from IN : UmlMm;
+
+-- genera los esquemas
+rule Diagrama_Esquema{
+	from
+		d : UmlMm!Diagrama  
+	to
+		out : ErMm!Esquema(
+			nombre <- d.nombre.debug('Creando esquema'),
+			tablas <- d.clases->collect(c | thisModule.Clase_Tabla(c))
+		)
+}
+
+-- genera una tabla
+lazy rule Clase_Tabla{
+	from
+		c : UmlMm!Clase
+	to
+		out: ErMm!Tabla(
+			nombre <- c.nombre.debug('Creando tabla'),
+			columnas <- (
+					c.atributos->collect(a | thisModule.Create_Data_column(a)
+				)->append(
+					thisModule.Create_ID_column(c)
+				)	
+			)
+		)
+}
+
+-- genera las columnas normales de la tabla
+lazy rule Create_Data_column{
+	from
+		a : UmlMm!Atributo
+	to
+		out: ErMm!Columna(
+			nombre <- a.nombre.debug('Creando columna'),
+			rango <- a.max,
+			tipo <- a.getType()
+		)
+}
+
+-- obtiene el tipo de la columna a partir del tipo del elemeto
+helper context UmlMm!Atributo def: getType() : ErMm!TiposER = 
+	if (self.tipo = #entero or self.tipo = #boolean) then #integer
+	else 
+		if self.tipo = #cadena then #string
+		else 
+			if self.tipo = #real then #double
+			else 
+				if self.tipo = #fecha then #fecha
+				else #integer 
+				endif
+			endif
+		endif
+	endif;
+
+-- genera la columna ID de la tabla
+lazy rule Create_ID_column{
+	from
+		c: UmlMm!Clase
+	to
+		out: ErMm!Columna(
+			nombre <- c.nombre + '_id'.debug('Creando tabla id'), 
+			tipo <- #integer,
+			esPrimaria <- true,
+			esUnico <- true,
+			rango <- -1
+		)
+}
