@@ -37,26 +37,9 @@ lazy rule Create_Data_column{
 		a : UmlMm!Atributo
 	to
 		out: ErMm!Columna(
-			nombre <- a.nombre.debug('Creando columna'),
-			rango <- a.max,
-			tipo <- a.getType()
+			nombre <- a.nombre.debug('Creando columna')
 		)
 }
-
--- obtiene el tipo de la columna a partir del tipo del elemeto
-helper context UmlMm!Atributo def: getType() : ErMm!TiposER = 
-	if (self.tipo = #entero or self.tipo = #boolean) then #integer
-	else 
-		if self.tipo = #cadena then #string
-		else 
-			if self.tipo = #real then #double
-			else 
-				if self.tipo = #fecha then #fecha
-				else #integer 
-				endif
-			endif
-		endif
-	endif;
 
 -- genera la columna ID de la tabla
 lazy rule Create_ID_column{
