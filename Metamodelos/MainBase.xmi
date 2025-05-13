@@ -4,7 +4,7 @@
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:dc_uml="http://DSM/DC_UML"
-    xsi:schemaLocation="http://DSM/DC_UML DC_UML.ecore"
+    xsi:schemaLocation="http://DSM/DC_UML /dsm/Metamodelos/DC_UML.ecore"
     nombre="Hotel">
   <clases nombre="Hotel"
       finrelacion="//@relaciones.0/@finRelacion.0 //@relaciones.1/@finRelacion.0">

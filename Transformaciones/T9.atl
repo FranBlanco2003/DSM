@@ -67,9 +67,6 @@ rule Relacion_ClaveAjena{
 				}
 			}
 			-- Falta caso muchos a muchos
-			else{
-				
-			}
 		}
 	}
 }
@@ -146,3 +143,75 @@ unique lazy rule Create_ID_column{
 			rango <- -1
 		)
 }
+--8. Generación de FKs en tablas correspondientes a Clases Asociación
+rule FinRelacionAsociacion_ClaveAjena {
+	from
+		end : UmlMm!FinRelacion (
+			end.relacion.claseasociacion <> OclUndefined and
+			end.clase <> end.relacion.claseasociacion
+		)
+	using {
+		-- Tabla de la clase de la relación de la clase de asociación
+		tablaClaseAsociacion : ErMm!Tabla = thisModule.lookupTabla(end.relacion.claseasociacion.nombre);
+		claseAsociada : UmlMm!Clase = end.clase;
+		tablaClaseAsociada : ErMm!Tabla = thisModule.lookupTabla(claseAsociada.nombre);
+		pkClaseAsociada : ErMm!Columna = tablaClaseAsociada.columnas->select(c | c.esPrimaria)->first();
+	}
+	to
+		-- Se crea la clave ajena para la relación con la clase de asociación
+		fk : ErMm!ClaveAjena (
+			nombre <- (end.rol + '_ref_' + claseAsociada.nombre + '_fk').debug('Creando FK para clase asociación'),
+			esquema <- tablaClaseAsociacion.esquema,
+			columna <- columnaFK,
+			referenciada <- pkClaseAsociada
+		),
+		-- Columna FK en la tabla de la clase de asociación
+		columnaFK : ErMm!Columna (
+			nombre <- (end.rol + '_ref_' + claseAsociada.nombre + '_id').debug('Creando columna FK para clase asociación'),
+			tipo <- pkClaseAsociada.tipo,  -- Tomamos el tipo de la columna primaria
+			esPrimaria <- false,           -- No es primaria en la tabla de la clase de asociación
+			esUnico <- if end.max = 1 then true else false endif,  -- Si max = 1, es único
+			esNulo <- if end.min = 0 then true else false endif,   -- Si min = 0, es nulo
+			rango <- end.max,             -- El rango debe ser el mismo que el de la relación
+			tabla <- tablaClaseAsociacion
+		)
+}
+-- 9.Generación de FKs para la herencia
+rule Generalizacion_ClaveAjena {
+	from
+		g : UmlMm!Generalizacion
+	using
+		{
+			-- Subclase y superclase involucradas en la generalización
+			subClase : UmlMm!Clase = g.subClase;
+			superClase : UmlMm!Clase = g.superClase;
+			
+			-- Tabla de la subclase y superclase
+			tablaSub : ErMm!Tabla = thisModule.lookupTabla(subClase.nombre);
+			tablaSuper : ErMm!Tabla = thisModule.lookupTabla(superClase.nombre);
+			
+			-- Columna primaria de la superclase
+			pkSuper : ErMm!Columna = tablaSuper.columnas->select(c | c.esPrimaria)->first();
+		}
+	to
+		-- Generación de la clave ajena en la tabla de la subclase
+		fk : ErMm!ClaveAjena (
+			nombre <- (subClase.nombre + '_inherits_' + superClase.nombre + '_fk').debug('Creando FK para herencia'),
+			esquema <- tablaSub.esquema,
+			columna <- loc,
+			referenciada <- pkSuper
+		),
+		
+		-- Creación de la columna de la clave ajena en la tabla de la subclase
+		loc : ErMm!Columna (
+			nombre <- (superClase.nombre + '_id').debug('Creando columna FK para herencia'),
+			tipo <- #integer,
+			esPrimaria <- false,
+			esUnico <- true,            -- La columna es única
+			esNulo <- false,           -- No debe ser nula en una relación de herencia
+			rango <- 1,                -- El rango es 1: una subclase está asociada con una superclase
+			tabla <- tablaSub
+		)
+}
+
+

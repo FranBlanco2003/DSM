@@ -31,7 +31,7 @@
     </eAnnotations>
     <eAnnotations source="http://www.eclipse.org/emf/2002/Ecore/OCL/Pivot">
       <details key="herenciaClausura" value="self.especializa->closure(especializa)->includes(self)=false"/>
-      <details key="rolUnico" value="self.finrelacion->isUnique(nombre)"/>
+      <details key="rolUnico" value="self.finrelacion.relacion->collect(finRelacion)->select(clase&lt;>self)->isUnique(rol)"/>
       <details key="nombreAtributoUnico" value="self.atributos->isUnique(nombre)"/>
     </eAnnotations>
     <eStructuralFeatures xsi:type="ecore:EReference" name="atributos" upperBound="-1"

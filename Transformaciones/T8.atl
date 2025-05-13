@@ -67,9 +67,6 @@ rule Relacion_ClaveAjena{
 				}
 			}
 			-- Falta caso muchos a muchos
-			else{
-				
-			}
 		}
 	}
 }
@@ -144,5 +141,38 @@ unique lazy rule Create_ID_column{
 			esPrimaria <- true,
 			esUnico <- true,
 			rango <- -1
+		)
+}
+--8.Generación de FKs en tablas correspondientes a Clases Asociación
+rule FinRelacionAsociacion_ClaveAjena {
+	from
+		end : UmlMm!FinRelacion (
+			end.relacion.claseasociacion <> OclUndefined and
+			end.clase <> end.relacion.claseasociacion
+		)
+	using {
+		-- Tabla de la clase de la relación de la clase de asociación
+		tablaClaseAsociacion : ErMm!Tabla = thisModule.lookupTabla(end.relacion.claseasociacion.nombre);
+		claseAsociada : UmlMm!Clase = end.clase;
+		tablaClaseAsociada : ErMm!Tabla = thisModule.lookupTabla(claseAsociada.nombre);
+		pkClaseAsociada : ErMm!Columna = tablaClaseAsociada.columnas->select(c | c.esPrimaria)->first();
+	}
+	to
+		-- Se crea la clave ajena para la relación con la clase de asociación
+		fk : ErMm!ClaveAjena (
+			nombre <- (end.rol + '_ref_' + claseAsociada.nombre + '_fk').debug('Creando FK para clase asociación'),
+			esquema <- tablaClaseAsociacion.esquema,
+			columna <- columnaFK,
+			referenciada <- pkClaseAsociada
+		),
+		-- Columna FK en la tabla de la clase de asociación
+		columnaFK : ErMm!Columna (
+			nombre <- (end.rol + '_ref_' + claseAsociada.nombre + '_id').debug('Creando columna FK para clase asociación'),
+			tipo <- pkClaseAsociada.tipo,  -- Tomamos el tipo de la columna primaria
+			esPrimaria <- false,           -- No es primaria en la tabla de la clase de asociación
+			esUnico <- if end.max = 1 then true else false endif,  -- Si max = 1, es único
+			esNulo <- if end.min = 0 then true else false endif,   -- Si min = 0, es nulo
+			rango <- end.max,             -- El rango debe ser el mismo que el de la relación
+			tabla <- tablaClaseAsociacion
 		)
 }
