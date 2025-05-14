@@ -1,11 +1,20 @@
 -- @nsURI UmlMm=http://DSM/DC_UML
 -- @nsURI ErMm=http://DSM/ER_2025
 
-module T6;
+module T8;
 create OUT : ErMm from IN : UmlMm;
 
--- genera los esquemas
-rule Diagrama_Esquema{
+-- Helper global para buscar tablas por nombre
+helper def: lookupTabla(diagrama : UmlMm!Diagrama, tableName : String) : ErMm!Tabla =
+  let esquema : ErMm!Esquema = thisModule.resolveTemp(diagrama, 'esq')
+  in if esquema <> OclUndefined then
+      esquema.tablas->select(t | t.nombre = tableName)->first()
+     else
+      OclUndefined
+     endif;
+
+-- Genera los esquemas
+rule Diagrama_Esquema {
 	from
 		d : UmlMm!Diagrama  
 	to
@@ -15,164 +24,36 @@ rule Diagrama_Esquema{
 		)
 }
 
--- genera las claves ajenas
-rule Relacion_ClaveAjena {
-    from
-        r : UmlMm!Relacion
-    using {
-        -- extremos de la relacion
-        extremos : Sequence(UmlMm!FinRelacion) = r.finRelacion->asSequence();
-        extremo1 : UmlMm!FinRelacion = extremos->first();
-        extremo2 : UmlMm!FinRelacion = extremos->last();
-        
-        extremoDependiente : UmlMm!FinRelacion = extremo1; -- resultado por defecto del extremo dependiente
-        extremoIndependiente : UmlMm!FinRelacion = extremo2; 
-        
-        esquema : ErMm!Esquema = thisModule.resolveTemp(r.diagrama, 'esq');
-    }
-    to
-        -- Tabla intermedia para relaciones muchos a muchos
-        tablaMM : ErMm!Tabla (
-            nombre <- (r.nombre + '_tabla').debug('Creando tabla intermedia con nombre'),
-            esquema <- esquema,
-            columnas <- Sequence{col1, col2}
-        ),
-        
-        -- Columna para la primera clase en la tabla intermedia
-        col1 : ErMm!Columna (
-            nombre <- (extremo1.rol + '_id').debug('Creando columna 1 en tabla intermedia'),
-            tipo <- #integer,
-            esPrimaria <- true,
-            esUnico <- false,
-            esNulo <- false,
-            rango <- extremo1.max.debug('Rango máximo para columna 1'),
-            tabla <- tablaMM
-        ),
-        
-        -- Columna para la segunda clase en la tabla intermedia
-        col2 : ErMm!Columna (
-            nombre <- (extremo2.rol + '_id').debug('Creando columna 2 en tabla intermedia'),
-            tipo <- #integer,
-            esPrimaria <- true,
-            esUnico <- false,
-            esNulo <- false,
-            rango <- extremo2.max.debug('Rango máximo para columna 2'),
-            tabla <- tablaMM
-        ),
-        
-        -- Clave ajena para la primera relación
-        fk1 : ErMm!ClaveAjena (
-            nombre <- (extremo1.rol + '_fk').debug('Creando FK 1'),
-            esquema <- esquema,
-            columna <- col1,
-            referenciada <- r.lookupTabla(extremo1.clase.nombre).columnas
-                            ->select(c | c.esPrimaria)
-                            ->first().debug('Columna referenciada por FK 1')
-        ),
-        
-        -- Clave ajena para la segunda relación
-        fk2 : ErMm!ClaveAjena (
-            nombre <- (extremo2.rol + '_fk').debug('Creando FK 2'),
-            esquema <- esquema,
-            columna <- col2,
-            referenciada <- r.lookupTabla(extremo2.clase.nombre).columnas
-                            ->select(c | c.esPrimaria)
-                            ->first().debug('Columna referenciada por FK 2')
-        )
-    do {
-        -- limitado a 1 - 1 y 0 - 1
-        if (extremo1.max = 1 and extremo2.max = 1) {
-            ('Detectada relación uno a uno').debug();
-            -- Si el 2º fin es mas dependiente que el primero, lo marcamos. Si no, usamos el primero
-            if (extremo2.composicion or extremo2.max = 1 and extremo2.min = 1) {
-                ('Cambiando extremo dependiente al segundo extremo').debug();
-                extremoDependiente = extremo2;
-                extremoIndependiente = extremo1;
-            }
-        }
-        else {
-            -- Cubre caso 0/1..* - 0/1..1
-            if ((extremo1.max = -1 and extremo2.max = 1) or (extremo1.max = 1 and extremo2.max = -1)) {
-                ('Detectada relación uno a muchos').debug();
-                if (extremo2.max = -1) {
-                    ('Cambiando extremo dependiente al segundo extremo (muchos)').debug();
-                    extremoDependiente = extremo2;
-                    extremoIndependiente = extremo1;
-                }
-            }
-            -- Caso muchos a muchos
-            else if ((extremo1.max > 1 or extremo1.max = -1) and (extremo2.max > 1 or extremo2.max = -1)) {
-                ('Detectada relación muchos a muchos').debug();
-                ('Cardinalidad máxima extremo 1: ' + extremo1.max.toString()).debug();
-                ('Cardinalidad máxima extremo 2: ' + extremo2.max.toString()).debug();
-                -- En este caso se usa la tabla intermedia generada arriba
-                -- No necesitamos hacer nada adicional aquí ya que la tabla y FKs ya están creadas
-            }
-        }
-    }
-}
-
-helper context UmlMm!Relacion def: lookupTabla(tableName : String) : ErMm!Tabla =
-  -- 1) Obtengo el Esquema ER asociado al Diagrama de esta Relación
-  let esquema : ErMm!Esquema =
-    thisModule
-      .resolveTemp(self.diagrama,    -- la UmlMm!Diagrama
-                   'esq')           -- target‐pattern name de Diagrama_Esquema
-  in
-  -- 2) Del Esquema, filtro sus tablas por nombre
-  esquema
-    .tablas                       -- colección ErMm!Tabla
-    ->select(t | t.nombre = tableName)
-	->first() -- Obtenemos la unica
-;
-
--- genera una tabla
-unique lazy rule Clase_Tabla{
+-- Genera las tablas para clases
+unique lazy rule Clase_Tabla {
 	from
 		c : UmlMm!Clase
 	to
-		tabla: ErMm!Tabla(
+		tabla : ErMm!Tabla(
 			nombre <- c.nombre.debug('Creando tabla'),
 			columnas <- (
-					c.atributos->collect(a | thisModule.Create_Data_column(a)
-				)->append(
-					thisModule.Create_ID_column(c)
-				)	
+				c.atributos->collect(a | thisModule.Create_Data_column(a))
+				->append(thisModule.Create_ID_column(c))
 			)
 		)
 }
 
--- genera las columnas normales de la tabla
-unique lazy rule Create_Data_column{
+-- Genera las columnas normales de la tabla
+unique lazy rule Create_Data_column {
 	from
 		a : UmlMm!Atributo
 	to
-		col: ErMm!Columna(
+		col : ErMm!Columna(
 			nombre <- a.nombre.debug('Creando columna'),
-			rango <- a.max, -- ¿Que es el rango?
+			rango <- a.max,
 			esUnico <- if a.max = 1 then true else false endif,
-			esNulo <- if a.min = 0 then true else false endif, -- ¿esto deberia estar?
+			esNulo <- if a.min = 0 then true else false endif,
 			tipo <- a.getType()
 		)
 }
 
--- obtiene el tipo de la columna a partir del tipo del elemeto
-helper context UmlMm!Atributo def: getType() : ErMm!TiposER = 
-	if (self.tipo = #entero or self.tipo = #boolean) then #integer
-	else 
-		if self.tipo = #cadena then #string
-		else 
-			if self.tipo = #real then #double
-			else 
-				if self.tipo = #fecha then #fecha
-				else #integer 
-				endif
-			endif
-		endif
-	endif;
-
--- genera la columna ID de la tabla
-unique lazy rule Create_ID_column{
+-- Genera la columna ID de la tabla
+unique lazy rule Create_ID_column {
 	from
 		c: UmlMm!Clase
 	to
@@ -184,68 +65,82 @@ unique lazy rule Create_ID_column{
 			rango <- -1
 		)
 }
---8.Generación de FKs en tablas correspondientes a Clases Asociación
--- Rule to handle ClaseAsociacion by creating a table with foreign keys to both related classes
+
+-- Helper para obtener el tipo del atributo
+helper context UmlMm!Atributo def: getType() : ErMm!TiposER = 
+	if self.tipo = #entero then #integer
+	else if self.tipo = #boolean then #integer
+	else if self.tipo = #cadena then #string
+	else if self.tipo = #real then #double
+	else if self.tipo = #fecha then #fecha
+	else #integer 
+	endif endif endif endif endif;
+
+-- Maneja las clases de asociación creando una tabla con FKs para las dos clases asociadas
 rule ClaseAsociacion_Tabla {
   from
     ca : UmlMm!ClaseAsociacion
   using {
-    -- Debug the association class being processed
-    nombreCA : String = ca.nombre.debug('Processing ClaseAsociacion: ');
-    esquema : ErMm!Esquema = thisModule.resolveTemp(ca.diagrama, 'esq').debug('Retrieved esquema: ');
-    clase1 : UmlMm!Clase = ca.asociacion.finRelacion->first().clase.debug('First class: ');
-    clase2 : UmlMm!Clase = ca.asociacion.finRelacion->last().clase.debug('Second class: ');
-    -- Create tables for related classes if they don't exist
-    tabla1 : ErMm!Tabla = thisModule.Clase_Tabla(clase1).debug('Created/Retrieved tabla1: ');
-    tabla2 : ErMm!Tabla = thisModule.Clase_Tabla(clase2).debug('Created/Retrieved tabla2: ');
+    -- Esquema de la asociación
+    esquema : ErMm!Esquema = thisModule.resolveTemp(ca.diagrama, 'esq');
+    clase1 : UmlMm!Clase = ca.asociacion.finRelacion->first().clase;
+    clase2 : UmlMm!Clase = ca.asociacion.finRelacion->last().clase;
+    
+    -- Tablas para las clases asociadas
+    tabla1 : ErMm!Tabla = thisModule.lookupTabla(ca.diagrama, clase1.nombre);
+    tabla2 : ErMm!Tabla = thisModule.lookupTabla(ca.diagrama, clase2.nombre);
+    
+    -- Columnas ID de las tablas asociadas
+    pk1 : ErMm!Columna = if tabla1 <> OclUndefined then tabla1.columnas->select(c | c.esPrimaria)->first() else OclUndefined endif;
+    pk2 : ErMm!Columna = if tabla2 <> OclUndefined then tabla2.columnas->select(c | c.esPrimaria)->first() else OclUndefined endif;
   }
   to
-    tabla : ErMm!Tabla (
+    -- Tabla de la clase de asociación
+    tablaAsociacion : ErMm!Tabla (
       nombre <- ca.nombre.debug('Creating association table: '),
       esquema <- esquema,
       columnas <- Sequence{
         thisModule.Create_ID_column(ca).debug('Created ID column: '),
-        fk1.debug('Created FK1: '), 
-        fk2.debug('Created FK2: ')
+        fk1_col.debug('Created FK1 column: '), 
+        fk2_col.debug('Created FK2 column: ')
       }->union(
         ca.atributos->collect(a | thisModule.Create_Data_column(a).debug('Created attribute column: '))
       )
     ),
-    -- FK column for first related class
-    fk1 : ErMm!Columna (
+    
+    -- Columna FK para la primera clase asociada
+    fk1_col : ErMm!Columna (
       nombre <- (clase1.nombre + '_ref').debug('Creating FK1 column named: '),
       tipo <- #integer,
       esUnico <- false,
       esNulo <- false,
       rango <- -1,
-      tabla <- tabla,
-      claveAjena <- claveAjena1
+      tabla <- tablaAsociacion
     ),
-    -- FK column for second related class  
-    fk2 : ErMm!Columna (
+    
+    -- Columna FK para la segunda clase asociada
+    fk2_col : ErMm!Columna (
       nombre <- (clase2.nombre + '_ref').debug('Creating FK2 column named: '), 
       tipo <- #integer,
       esUnico <- false,
       esNulo <- false,
       rango <- -1,
-      tabla <- tabla,
-      claveAjena <- claveAjena2
+      tabla <- tablaAsociacion
     ),
-    -- Create foreign key constraint for first class
-    claveAjena1 : ErMm!ClaveAjena (
+    
+    -- FK para la primera clase asociada
+    fk1 : ErMm!ClaveAjena (
       nombre <- ('FK_' + ca.nombre + '_' + clase1.nombre).debug('Creating FK1 constraint named: '),
       esquema <- esquema,
-      columna <- fk1,
-      referenciada <- thisModule.resolveTemp(clase1, 'id_col').debug('FK1 references ID column: ')
+      columna <- fk1_col,
+      referenciada <- pk1
     ),
-    -- Create foreign key constraint for second class
-    claveAjena2 : ErMm!ClaveAjena (
+    
+    -- FK para la segunda clase asociada
+    fk2 : ErMm!ClaveAjena (
       nombre <- ('FK_' + ca.nombre + '_' + clase2.nombre).debug('Creating FK2 constraint named: '),
       esquema <- esquema,
-      columna <- fk2,
-      referenciada <- thisModule.resolveTemp(clase2, 'id_col').debug('FK2 references ID column: ')
+      columna <- fk2_col,
+      referenciada <- pk2
     )
-  do {
-    ('Finished processing ClaseAsociacion: ' + ca.nombre).debug();
-  }
 }

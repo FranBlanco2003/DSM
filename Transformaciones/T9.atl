@@ -1,7 +1,7 @@
 -- @nsURI UmlMm=http://DSM/DC_UML
 -- @nsURI ErMm=http://DSM/ER_2025
 
-module T6;
+module T9;
 create OUT : ErMm from IN : UmlMm;
 
 -- genera los esquemas
