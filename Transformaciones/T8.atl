@@ -16,59 +16,100 @@ rule Diagrama_Esquema{
 }
 
 -- genera las claves ajenas
-rule Relacion_ClaveAjena{
-	from
-		r : UmlMm!Relacion
-	using
-		{
-			-- extremos de la relacion
-			extremos : Sequence(UmlMm!FinRelacion) = r.finRelacion->asSequence();
-			extremo1 : UmlMm!FinRelacion = extremos->first();
-			extremo2 : UmlMm!FinRelacion = extremos->last();
-			
-			extremoDependiente : UmlMm!FinRelacion = extremo1; -- resultado por defecto del extremo dependiente
-			extremoIndependiente : UmlMm!FinRelacion = extremo2; 
-			
-			esquema : ErMm!Esquema = thisModule.resolveTemp(r.diagrama, 'esq');
-		}
-	to
-		fk : ErMm!ClaveAjena(
-			nombre <- (extremo1.rol + '_to_' + extremo2.rol).debug('Creando clave ajena'),
-			esquema      <- esquema,
-            columna      <- loc,
-            referenciada <- r.lookupTabla(extremoIndependiente.clase.nombre).columnas
-							->select(c | c.esPrimaria)
-							->first()                 
-		), 
-		-- Columna local de la parte dependiente
-		loc : ErMm!Columna(
-			nombre <- (extremoDependiente.rol + '_ref_' + extremoIndependiente.rol).debug('Creada columna dependiente'),
-			rango <- extremoDependiente.max, -- ¿Que es el rango?
-			esUnico <- if extremoDependiente.max = 1 then true else false endif,
-			esNulo <- if extremoDependiente.min = 0 then true else false endif, -- ¿esto deberia estar?
-			tipo <- #integer,
-			tabla <- r.lookupTabla(extremoDependiente.clase.nombre)
-		)
-	do{
-		-- limitado a 1 - 1 y 0 - 1
-		if (extremo1.max = 1 and extremo2.max = 1) {
-			-- Si el 2º fin es mas dependiente que el primero, lo marcamos. Si no, usamos el primero
-			if (extremo2.composicion or extremo2.max = 1 and extremo2.min = 1){
-					extremoDependiente = extremo2;
-					extremoIndependiente = extremo1;
-			}
-		}
-		else {
-			-- Cubre caso 0/1..* - 0/1..1
-			if ((extremo1.max = -1 and extremo2.max = 1) or (extremo1.max = 1 and extremo2.max = -1)){
-				if (extremo2.max = -1){
-					extremoDependiente = extremo2;
-					extremoIndependiente = extremo1;
-				}
-			}
-			-- Falta caso muchos a muchos
-		}
-	}
+rule Relacion_ClaveAjena {
+    from
+        r : UmlMm!Relacion
+    using {
+        -- extremos de la relacion
+        extremos : Sequence(UmlMm!FinRelacion) = r.finRelacion->asSequence();
+        extremo1 : UmlMm!FinRelacion = extremos->first();
+        extremo2 : UmlMm!FinRelacion = extremos->last();
+        
+        extremoDependiente : UmlMm!FinRelacion = extremo1; -- resultado por defecto del extremo dependiente
+        extremoIndependiente : UmlMm!FinRelacion = extremo2; 
+        
+        esquema : ErMm!Esquema = thisModule.resolveTemp(r.diagrama, 'esq');
+    }
+    to
+        -- Tabla intermedia para relaciones muchos a muchos
+        tablaMM : ErMm!Tabla (
+            nombre <- (r.nombre + '_tabla').debug('Creando tabla intermedia con nombre'),
+            esquema <- esquema,
+            columnas <- Sequence{col1, col2}
+        ),
+        
+        -- Columna para la primera clase en la tabla intermedia
+        col1 : ErMm!Columna (
+            nombre <- (extremo1.rol + '_id').debug('Creando columna 1 en tabla intermedia'),
+            tipo <- #integer,
+            esPrimaria <- true,
+            esUnico <- false,
+            esNulo <- false,
+            rango <- extremo1.max.debug('Rango máximo para columna 1'),
+            tabla <- tablaMM
+        ),
+        
+        -- Columna para la segunda clase en la tabla intermedia
+        col2 : ErMm!Columna (
+            nombre <- (extremo2.rol + '_id').debug('Creando columna 2 en tabla intermedia'),
+            tipo <- #integer,
+            esPrimaria <- true,
+            esUnico <- false,
+            esNulo <- false,
+            rango <- extremo2.max.debug('Rango máximo para columna 2'),
+            tabla <- tablaMM
+        ),
+        
+        -- Clave ajena para la primera relación
+        fk1 : ErMm!ClaveAjena (
+            nombre <- (extremo1.rol + '_fk').debug('Creando FK 1'),
+            esquema <- esquema,
+            columna <- col1,
+            referenciada <- r.lookupTabla(extremo1.clase.nombre).columnas
+                            ->select(c | c.esPrimaria)
+                            ->first().debug('Columna referenciada por FK 1')
+        ),
+        
+        -- Clave ajena para la segunda relación
+        fk2 : ErMm!ClaveAjena (
+            nombre <- (extremo2.rol + '_fk').debug('Creando FK 2'),
+            esquema <- esquema,
+            columna <- col2,
+            referenciada <- r.lookupTabla(extremo2.clase.nombre).columnas
+                            ->select(c | c.esPrimaria)
+                            ->first().debug('Columna referenciada por FK 2')
+        )
+    do {
+        -- limitado a 1 - 1 y 0 - 1
+        if (extremo1.max = 1 and extremo2.max = 1) {
+            ('Detectada relación uno a uno').debug();
+            -- Si el 2º fin es mas dependiente que el primero, lo marcamos. Si no, usamos el primero
+            if (extremo2.composicion or extremo2.max = 1 and extremo2.min = 1) {
+                ('Cambiando extremo dependiente al segundo extremo').debug();
+                extremoDependiente = extremo2;
+                extremoIndependiente = extremo1;
+            }
+        }
+        else {
+            -- Cubre caso 0/1..* - 0/1..1
+            if ((extremo1.max = -1 and extremo2.max = 1) or (extremo1.max = 1 and extremo2.max = -1)) {
+                ('Detectada relación uno a muchos').debug();
+                if (extremo2.max = -1) {
+                    ('Cambiando extremo dependiente al segundo extremo (muchos)').debug();
+                    extremoDependiente = extremo2;
+                    extremoIndependiente = extremo1;
+                }
+            }
+            -- Caso muchos a muchos
+            else if ((extremo1.max > 1 or extremo1.max = -1) and (extremo2.max > 1 or extremo2.max = -1)) {
+                ('Detectada relación muchos a muchos').debug();
+                ('Cardinalidad máxima extremo 1: ' + extremo1.max.toString()).debug();
+                ('Cardinalidad máxima extremo 2: ' + extremo2.max.toString()).debug();
+                -- En este caso se usa la tabla intermedia generada arriba
+                -- No necesitamos hacer nada adicional aquí ya que la tabla y FKs ya están creadas
+            }
+        }
+    }
 }
 
 helper context UmlMm!Relacion def: lookupTabla(tableName : String) : ErMm!Tabla =
