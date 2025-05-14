@@ -144,35 +144,67 @@ unique lazy rule Create_ID_column{
 		)
 }
 --8.Generación de FKs en tablas correspondientes a Clases Asociación
-rule FinRelacionAsociacion_ClaveAjena {
-	from
-		end : UmlMm!FinRelacion (
-			end.relacion.claseasociacion <> OclUndefined and
-			end.clase <> end.relacion.claseasociacion
-		)
-	using {
-		-- Tabla de la clase de la relación de la clase de asociación
-		tablaClaseAsociacion : ErMm!Tabla = thisModule.lookupTabla(end.relacion.claseasociacion.nombre);
-		claseAsociada : UmlMm!Clase = end.clase;
-		tablaClaseAsociada : ErMm!Tabla = thisModule.lookupTabla(claseAsociada.nombre);
-		pkClaseAsociada : ErMm!Columna = tablaClaseAsociada.columnas->select(c | c.esPrimaria)->first();
-	}
-	to
-		-- Se crea la clave ajena para la relación con la clase de asociación
-		fk : ErMm!ClaveAjena (
-			nombre <- (end.rol + '_ref_' + claseAsociada.nombre + '_fk').debug('Creando FK para clase asociación'),
-			esquema <- tablaClaseAsociacion.esquema,
-			columna <- columnaFK,
-			referenciada <- pkClaseAsociada
-		),
-		-- Columna FK en la tabla de la clase de asociación
-		columnaFK : ErMm!Columna (
-			nombre <- (end.rol + '_ref_' + claseAsociada.nombre + '_id').debug('Creando columna FK para clase asociación'),
-			tipo <- pkClaseAsociada.tipo,  -- Tomamos el tipo de la columna primaria
-			esPrimaria <- false,           -- No es primaria en la tabla de la clase de asociación
-			esUnico <- if end.max = 1 then true else false endif,  -- Si max = 1, es único
-			esNulo <- if end.min = 0 then true else false endif,   -- Si min = 0, es nulo
-			rango <- end.max,             -- El rango debe ser el mismo que el de la relación
-			tabla <- tablaClaseAsociacion
-		)
+-- Rule to handle ClaseAsociacion by creating a table with foreign keys to both related classes
+rule ClaseAsociacion_Tabla {
+  from
+    ca : UmlMm!ClaseAsociacion
+  using {
+    -- Debug the association class being processed
+    nombreCA : String = ca.nombre.debug('Processing ClaseAsociacion: ');
+    esquema : ErMm!Esquema = thisModule.resolveTemp(ca.diagrama, 'esq').debug('Retrieved esquema: ');
+    clase1 : UmlMm!Clase = ca.asociacion.finRelacion->first().clase.debug('First class: ');
+    clase2 : UmlMm!Clase = ca.asociacion.finRelacion->last().clase.debug('Second class: ');
+    -- Create tables for related classes if they don't exist
+    tabla1 : ErMm!Tabla = thisModule.Clase_Tabla(clase1).debug('Created/Retrieved tabla1: ');
+    tabla2 : ErMm!Tabla = thisModule.Clase_Tabla(clase2).debug('Created/Retrieved tabla2: ');
+  }
+  to
+    tabla : ErMm!Tabla (
+      nombre <- ca.nombre.debug('Creating association table: '),
+      esquema <- esquema,
+      columnas <- Sequence{
+        thisModule.Create_ID_column(ca).debug('Created ID column: '),
+        fk1.debug('Created FK1: '), 
+        fk2.debug('Created FK2: ')
+      }->union(
+        ca.atributos->collect(a | thisModule.Create_Data_column(a).debug('Created attribute column: '))
+      )
+    ),
+    -- FK column for first related class
+    fk1 : ErMm!Columna (
+      nombre <- (clase1.nombre + '_ref').debug('Creating FK1 column named: '),
+      tipo <- #integer,
+      esUnico <- false,
+      esNulo <- false,
+      rango <- -1,
+      tabla <- tabla,
+      claveAjena <- claveAjena1
+    ),
+    -- FK column for second related class  
+    fk2 : ErMm!Columna (
+      nombre <- (clase2.nombre + '_ref').debug('Creating FK2 column named: '), 
+      tipo <- #integer,
+      esUnico <- false,
+      esNulo <- false,
+      rango <- -1,
+      tabla <- tabla,
+      claveAjena <- claveAjena2
+    ),
+    -- Create foreign key constraint for first class
+    claveAjena1 : ErMm!ClaveAjena (
+      nombre <- ('FK_' + ca.nombre + '_' + clase1.nombre).debug('Creating FK1 constraint named: '),
+      esquema <- esquema,
+      columna <- fk1,
+      referenciada <- thisModule.resolveTemp(clase1, 'id_col').debug('FK1 references ID column: ')
+    ),
+    -- Create foreign key constraint for second class
+    claveAjena2 : ErMm!ClaveAjena (
+      nombre <- ('FK_' + ca.nombre + '_' + clase2.nombre).debug('Creating FK2 constraint named: '),
+      esquema <- esquema,
+      columna <- fk2,
+      referenciada <- thisModule.resolveTemp(clase2, 'id_col').debug('FK2 references ID column: ')
+    )
+  do {
+    ('Finished processing ClaseAsociacion: ' + ca.nombre).debug();
+  }
 }
