@@ -1,0 +1,178 @@
+-- @nsURI UmlMm=http://DSM/DC_UML
+-- @nsURI ErMm=http://DSM/ER_2025
+
+module T6;
+create OUT : ErMm from IN : UmlMm;
+
+-- genera los esquemas
+rule Diagrama_Esquema{
+	from
+		d : UmlMm!Diagrama  
+	to
+		esq : ErMm!Esquema(
+			nombre <- d.nombre.debug('Creando esquema'),
+			tablas <- d.clases->collect(c | thisModule.Clase_Tabla(c))
+		)
+}
+
+-- genera las claves ajenas
+rule Relacion_ClaveAjena{
+	from
+		r : UmlMm!Relacion
+	using
+		{
+			-- extremos de la relacion
+			extremos : Sequence(UmlMm!FinRelacion) = r.finRelacion->asSequence();
+			extremo1 : UmlMm!FinRelacion = extremos->first();
+			extremo2 : UmlMm!FinRelacion = extremos->last();
+			
+			extremoDependiente : UmlMm!FinRelacion = extremo1; -- resultado por defecto del extremo dependiente
+			extremoIndependiente : UmlMm!FinRelacion = extremo2; 
+			
+			esquema : ErMm!Esquema = thisModule.resolveTemp(r.diagrama, 'esq');
+		}
+	to
+		fk : ErMm!ClaveAjena(
+			nombre <- (extremo1.rol + '_to_' + extremo2.rol).debug('Creando clave ajena'),
+			esquema      <- esquema,
+            columna      <- loc,
+            referenciada <- r.lookupTabla(extremoIndependiente.clase.nombre).columnas
+							->select(c | c.esPrimaria)
+							->first()                 
+		), 
+		-- Columna local de la parte dependiente
+		loc : ErMm!Columna(
+			nombre <- (extremoDependiente.rol + '_ref_' + extremoIndependiente.rol).debug('Creada columna dependiente'),
+			rango <- extremoDependiente.max, -- ¿Que es el rango?
+			esUnico <- if extremoDependiente.max = 1 then true else false endif,
+			esNulo <- if extremoDependiente.min = 0 then true else false endif, -- ¿esto deberia estar?
+			tipo <- #integer,
+			tabla <- r.lookupTabla(extremoDependiente.clase.nombre)
+		)
+	do{
+		-- limitado a 1 - 1 y 0 - 1
+		if (extremo1.max = 1 and extremo2.max = 1) {
+			-- Si el 2º fin es mas dependiente que el primero, lo marcamos. Si no, usamos el primero
+			if (extremo2.composicion or extremo2.max = 1 and extremo2.min = 1){
+					extremoDependiente = extremo2;
+					extremoIndependiente = extremo1;
+			}
+		}
+		else {
+			-- Cubre caso 0/1..* - 0/1..1
+			if ((extremo1.max = -1 and extremo2.max = 1) or (extremo1.max = 1 and extremo2.max = -1)){
+				if (extremo2.max = -1){
+					extremoDependiente = extremo2;
+					extremoIndependiente = extremo1;
+				}
+			}
+			-- Falta caso muchos a muchos
+		}
+	}
+}
+
+helper context UmlMm!Relacion def: lookupTabla(tableName : String) : ErMm!Tabla =
+  -- 1) Obtengo el Esquema ER asociado al Diagrama de esta Relación
+  let esquema : ErMm!Esquema =
+    thisModule
+      .resolveTemp(self.diagrama,    -- la UmlMm!Diagrama
+                   'esq')           -- target‐pattern name de Diagrama_Esquema
+  in
+  -- 2) Del Esquema, filtro sus tablas por nombre
+  esquema
+    .tablas                       -- colección ErMm!Tabla
+    ->select(t | t.nombre = tableName)
+	->first() -- Obtenemos la unica
+;
+
+-- genera una tabla
+unique lazy rule Clase_Tabla{
+	from
+		c : UmlMm!Clase
+	to
+		tabla: ErMm!Tabla(
+			nombre <- c.nombre.debug('Creando tabla'),
+			columnas <- (
+					c.atributos->collect(a | thisModule.Create_Data_column(a)
+				)->append(
+					thisModule.Create_ID_column(c)
+				)	
+			)
+		)
+}
+
+-- genera las columnas normales de la tabla
+unique lazy rule Create_Data_column{
+	from
+		a : UmlMm!Atributo
+	to
+		col: ErMm!Columna(
+			nombre <- a.nombre.debug('Creando columna'),
+			rango <- a.max, -- ¿Que es el rango?
+			esUnico <- if a.max = 1 then true else false endif,
+			esNulo <- if a.min = 0 then true else false endif, -- ¿esto deberia estar?
+			tipo <- a.getType()
+		)
+}
+
+-- obtiene el tipo de la columna a partir del tipo del elemeto
+helper context UmlMm!Atributo def: getType() : ErMm!TiposER = 
+	if (self.tipo = #entero or self.tipo = #boolean) then #integer
+	else 
+		if self.tipo = #cadena then #string
+		else 
+			if self.tipo = #real then #double
+			else 
+				if self.tipo = #fecha then #fecha
+				else #integer 
+				endif
+			endif
+		endif
+	endif;
+
+-- genera la columna ID de la tabla
+unique lazy rule Create_ID_column{
+	from
+		c: UmlMm!Clase
+	to
+		id_col: ErMm!Columna(
+			nombre <- c.nombre + '_id'.debug('Creando tabla id'), 
+			tipo <- #integer,
+			esPrimaria <- true,
+			esUnico <- true,
+			rango <- -1
+		)
+}
+--8.Generación de FKs en tablas correspondientes a Clases Asociación
+rule FinRelacionAsociacion_ClaveAjena {
+	from
+		end : UmlMm!FinRelacion (
+			end.relacion.claseasociacion <> OclUndefined and
+			end.clase <> end.relacion.claseasociacion
+		)
+	using {
+		-- Tabla de la clase de la relación de la clase de asociación
+		tablaClaseAsociacion : ErMm!Tabla = thisModule.lookupTabla(end.relacion.claseasociacion.nombre);
+		claseAsociada : UmlMm!Clase = end.clase;
+		tablaClaseAsociada : ErMm!Tabla = thisModule.lookupTabla(claseAsociada.nombre);
+		pkClaseAsociada : ErMm!Columna = tablaClaseAsociada.columnas->select(c | c.esPrimaria)->first();
+	}
+	to
+		-- Se crea la clave ajena para la relación con la clase de asociación
+		fk : ErMm!ClaveAjena (
+			nombre <- (end.rol + '_ref_' + claseAsociada.nombre + '_fk').debug('Creando FK para clase asociación'),
+			esquema <- tablaClaseAsociacion.esquema,
+			columna <- columnaFK,
+			referenciada <- pkClaseAsociada
+		),
+		-- Columna FK en la tabla de la clase de asociación
+		columnaFK : ErMm!Columna (
+			nombre <- (end.rol + '_ref_' + claseAsociada.nombre + '_id').debug('Creando columna FK para clase asociación'),
+			tipo <- pkClaseAsociada.tipo,  -- Tomamos el tipo de la columna primaria
+			esPrimaria <- false,           -- No es primaria en la tabla de la clase de asociación
+			esUnico <- if end.max = 1 then true else false endif,  -- Si max = 1, es único
+			esNulo <- if end.min = 0 then true else false endif,   -- Si min = 0, es nulo
+			rango <- end.max,             -- El rango debe ser el mismo que el de la relación
+			tabla <- tablaClaseAsociacion
+		)
+}
