@@ -1,0 +1,41 @@
+-- @nsURI UmlMm=http://DSM/DC_UML
+-- @nsURI ErMm=http://DSM/ER_2025
+
+module T3;
+create OUT : ErMm from IN : UmlMm;
+
+-- genera los esquemas
+rule Diagrama_Esquema{
+	from
+		d : UmlMm!Diagrama  
+	to
+		out : ErMm!Esquema(
+			nombre <- d.nombre.debug('Creando esquema'),
+			tablas <- d.clases->collect(c | thisModule.Clase_Tabla(c))
+		)
+}
+
+-- genera una tabla
+lazy rule Clase_Tabla{
+	from
+		c : UmlMm!Clase
+	to
+		out: ErMm!Tabla(
+			nombre <- c.nombre.debug('Creando tabla'),
+			columnas <- thisModule.Create_ID(c)
+		)
+}
+
+-- genera la columna ID de la tabla
+lazy rule Create_ID{
+	from
+		c: UmlMm!Clase
+	to
+		out: ErMm!Columna(
+			nombre <- c.nombre + '_id'.debug('Creando tabla id'), 
+			tipo <- #integer,
+			esPrimaria <- true,
+			esUnico <- true,
+			rango <- -1
+		)
+}

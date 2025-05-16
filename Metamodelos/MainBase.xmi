@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dc_uml:Diagrama
+    xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:dc_uml="http://DSM/DC_UML"
+    xsi:schemaLocation="http://DSM/DC_UML /DSM-main/Metamodelos/DC_UML.ecore"
+    nombre="Hotel">
+  <clases nombre="Hotel"
+      finrelacion="//@relaciones.0/@finRelacion.0 //@relaciones.1/@finRelacion.0">
+    <atributos
+        nombre="Nombre"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="Calificacion"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="Direccion"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="Descripcion"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+  </clases>
+  <clases nombre="Habitacion"
+      finrelacion="//@relaciones.0/@finRelacion.1 //@relaciones.3/@finRelacion.1 //@relaciones.4/@finRelacion.0">
+    <atributos
+        nombre="Puerta"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="Piso"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="Tipo"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="Numero_camas"
+        min="1"
+        max="1"/>
+  </clases>
+  <clases nombre="Reserva"
+      finrelacion="//@relaciones.2/@finRelacion.0 //@relaciones.4/@finRelacion.1">
+    <atributos
+        nombre="Fecha_inicio"
+        tipo="fecha"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="Fecha_fin"
+        tipo="fecha"
+        min="1"
+        max="1"/>
+  </clases>
+  <clases nombre="Persona"
+      finrelacion="//@relaciones.1/@finRelacion.1"
+      especializa="//@clases.4 //@clases.5">
+    <atributos
+        nombre="Nombre"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="dni"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="Telefono"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+  </clases>
+  <clases nombre="Residente"
+      finrelacion="//@relaciones.2/@finRelacion.1"
+      generaliza="//@clases.3">
+    <atributos
+        nombre="Correo"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+  </clases>
+  <clases nombre="Empleado"
+      finrelacion="//@relaciones.3/@finRelacion.0"
+      generaliza="//@clases.3">
+    <atributos
+        nombre="Salario"
+        min="1"
+        max="1"/>
+    <atributos
+        nombre="Cargo"
+        tipo="cadena"
+        min="1"
+        max="1"/>
+  </clases>
+  <clases xsi:type="dc_uml:ClaseAsociacion"
+      nombre="Coste"
+      asociacion="//@relaciones.4">
+    <atributos
+        nombre="Precio_por_noche"
+        min="1"
+        max="1"/>
+  </clases>
+  <relaciones
+      nombre="habitacion - hotel">
+    <finRelacion
+        clase="//@clases.0"
+        rol="hotel"
+        min="1"
+        max="1"
+        composicion="true"/>
+    <finRelacion
+        clase="//@clases.1"
+        rol="habitacion"
+        min="1"
+        max="-1"/>
+  </relaciones>
+  <relaciones
+      nombre="reserva - hotel">
+    <finRelacion
+        clase="//@clases.0"
+        rol="hotel"
+        min="1"
+        max="1"
+        composicion="true"/>
+    <finRelacion
+        clase="//@clases.3"
+        rol="reserva"
+        max="-1"/>
+  </relaciones>
+  <relaciones
+      nombre="reserva - residente">
+    <finRelacion
+        clase="//@clases.2"
+        rol="Reserva"
+        min="1"
+        max="1"/>
+    <finRelacion
+        clase="//@clases.4"
+        rol="Residente"
+        min="1"
+        max="1"/>
+  </relaciones>
+  <relaciones
+      nombre="empleado - habitacion">
+    <finRelacion
+        clase="//@clases.5"
+        rol="Empleado"
+        max="-1"/>
+    <finRelacion
+        clase="//@clases.1"
+        rol="Habitacion"
+        max="-1"/>
+  </relaciones>
+  <relaciones
+      nombre="habitacion - coste - reserva"
+      claseasociacion="//@clases.6">
+    <finRelacion
+        clase="//@clases.1"
+        rol="Habitacion"
+        min="1"
+        max="1"/>
+    <finRelacion
+        clase="//@clases.2"
+        rol="Reserva"
+        min="1"
+        max="1"/>
+  </relaciones>
+</dc_uml:Diagrama>
