@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<er_2025:Esquema xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:er_2025="http://DSM/ER_2025" nombre="Hotel">
+  <tablas nombre="Hotel">
+    <columnas nombre="Hotel_id" esPrimaria="true" esUnico="true" rango="-1"/>
+  </tablas>
+  <tablas nombre="Habitacion">
+    <columnas nombre="Habitacion_id" esPrimaria="true" esUnico="true" rango="-1"/>
+  </tablas>
+  <tablas nombre="Reserva">
+    <columnas nombre="Reserva_id" esPrimaria="true" esUnico="true" rango="-1"/>
+  </tablas>
+  <tablas nombre="Persona">
+    <columnas nombre="Persona_id" esPrimaria="true" esUnico="true" rango="-1"/>
+  </tablas>
+  <tablas nombre="Residente">
+    <columnas nombre="Residente_id" esPrimaria="true" esUnico="true" rango="-1"/>
+  </tablas>
+  <tablas nombre="Empleado">
+    <columnas nombre="Empleado_id" esPrimaria="true" esUnico="true" rango="-1"/>
+  </tablas>
+  <tablas nombre="Coste">
+    <columnas nombre="Coste_id" esPrimaria="true" esUnico="true" rango="-1"/>
+  </tablas>
+</er_2025:Esquema>
