@@ -6,8 +6,8 @@
     <columnas nombre="Direccion" tipo="string" esUnico="true" rango="1"/>
     <columnas nombre="Descripcion" tipo="string" esUnico="true" rango="1"/>
     <columnas nombre="Hotel_id" esPrimaria="true" esUnico="true" rango="-1"/>
-    <columnas nombre="hotel_ref_habitacion" claveAjena="//@clavesAjenas.0" rango="-1"/>
-    <columnas nombre="hotel_ref_reserva" claveAjena="//@clavesAjenas.1" rango="-1"/>
+    <columnas nombre="hotel_ref_habitacion" claveAjena="//@clavesAjenas.0" esUnico="true" rango="1"/>
+    <columnas nombre="hotel_ref_reserva" claveAjena="//@clavesAjenas.1" esUnico="true" rango="1"/>
   </tablas>
   <tablas nombre="Habitacion">
     <columnas nombre="Puerta" esUnico="true" rango="1"/>
