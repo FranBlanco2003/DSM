@@ -1,41 +1,41 @@
 <?xml version="1.0" encoding="ISO-8859-1"?>
 <er_2025:Esquema xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:er_2025="http://DSM/ER_2025" nombre="Hotel">
   <tablas nombre="Hotel">
-    <columnas nombre="Nombre" tipo="string" rango="1"/>
-    <columnas nombre="Calificacion" tipo="string" rango="1"/>
-    <columnas nombre="Direccion" tipo="string" rango="1"/>
-    <columnas nombre="Descripcion" tipo="string" rango="1"/>
+    <columnas nombre="Nombre"/>
+    <columnas nombre="Calificacion"/>
+    <columnas nombre="Direccion"/>
+    <columnas nombre="Descripcion"/>
     <columnas nombre="Hotel_id" esPrimaria="true" esUnico="true" rango="-1"/>
   </tablas>
   <tablas nombre="Habitacion">
-    <columnas nombre="Puerta" rango="1"/>
-    <columnas nombre="Piso" rango="1"/>
-    <columnas nombre="Tipo" tipo="string" rango="1"/>
-    <columnas nombre="Numero_camas" rango="1"/>
+    <columnas nombre="Puerta"/>
+    <columnas nombre="Piso"/>
+    <columnas nombre="Tipo"/>
+    <columnas nombre="Numero_camas"/>
     <columnas nombre="Habitacion_id" esPrimaria="true" esUnico="true" rango="-1"/>
   </tablas>
   <tablas nombre="Reserva">
-    <columnas nombre="Fecha_inicio" tipo="fecha" rango="1"/>
-    <columnas nombre="Fecha_fin" tipo="fecha" rango="1"/>
+    <columnas nombre="Fecha_inicio"/>
+    <columnas nombre="Fecha_fin"/>
     <columnas nombre="Reserva_id" esPrimaria="true" esUnico="true" rango="-1"/>
   </tablas>
   <tablas nombre="Persona">
-    <columnas nombre="Nombre" tipo="string" rango="1"/>
-    <columnas nombre="dni" tipo="string" rango="1"/>
-    <columnas nombre="Telefono" tipo="string" rango="1"/>
+    <columnas nombre="Nombre"/>
+    <columnas nombre="dni"/>
+    <columnas nombre="Telefono"/>
     <columnas nombre="Persona_id" esPrimaria="true" esUnico="true" rango="-1"/>
   </tablas>
   <tablas nombre="Residente">
-    <columnas nombre="Correo" tipo="string" rango="1"/>
+    <columnas nombre="Correo"/>
     <columnas nombre="Residente_id" esPrimaria="true" esUnico="true" rango="-1"/>
   </tablas>
   <tablas nombre="Empleado">
-    <columnas nombre="Salario" rango="1"/>
-    <columnas nombre="Cargo" tipo="string" rango="1"/>
+    <columnas nombre="Salario"/>
+    <columnas nombre="Cargo"/>
     <columnas nombre="Empleado_id" esPrimaria="true" esUnico="true" rango="-1"/>
   </tablas>
   <tablas nombre="Coste">
-    <columnas nombre="Precio_por_noche" rango="1"/>
+    <columnas nombre="Precio_por_noche"/>
     <columnas nombre="Coste_id" esPrimaria="true" esUnico="true" rango="-1"/>
   </tablas>
 </er_2025:Esquema>

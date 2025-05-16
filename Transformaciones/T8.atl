@@ -5,13 +5,13 @@ module T8;
 create OUT : ErMm from IN : UmlMm;
 
 -- Helper global para buscar tablas por nombre
-helper def: lookupTabla(diagrama : UmlMm!Diagrama, tableName : String) : ErMm!Tabla =
-  let esquema : ErMm!Esquema = thisModule.resolveTemp(diagrama, 'esq')
-  in if esquema <> OclUndefined then
-      esquema.tablas->select(t | t.nombre = tableName)->first()
-     else
-      OclUndefined
-     endif;
+helper def: lookupTabla(tableName : String, esquema: ErMm!Esquema) : ErMm!Tabla =
+  -- 2) Del Esquema, filtro sus tablas por nombre
+  esquema
+    .tablas.debug('tablas')                       -- colección ErMm!Tabla
+    ->select(t | t.nombre = tableName)
+	->first() -- Obtenemos la unica
+;
 
 -- Genera los esquemas
 rule Diagrama_Esquema {
@@ -20,8 +20,11 @@ rule Diagrama_Esquema {
 	to
 		esq : ErMm!Esquema(
 			nombre <- d.nombre.debug('Creando esquema'),
-			tablas <- d.clases->collect(c | thisModule.Clase_Tabla(c))
+			tablas <- d.clases->select(c| not c.oclIsTypeOf(UmlMm!ClaseAsociacion))->collect(c | thisModule.Clase_Tabla(c))
 		)
+	do{
+		d.clases->select(c | c.oclIsTypeOf(UmlMm!ClaseAsociacion))->collect(c | thisModule.ClaseAsociacion_Tabla(c));
+	}
 }
 
 -- Genera las tablas para clases
@@ -76,23 +79,126 @@ helper context UmlMm!Atributo def: getType() : ErMm!TiposER =
 	else #integer 
 	endif endif endif endif endif;
 
+
+-- genera las claves ajenas
+rule Relacion_ClaveAjena {
+	from
+		r : UmlMm!Relacion 
+		( not ( r.finRelacion.first().max.intValue() = -1 and r.claseasociacion.oclIsUndefined()))
+	using {
+		-- extremos de la relación
+		extremos : Sequence(UmlMm!FinRelacion) = r.finRelacion->asSequence();
+		extremo1 : UmlMm!FinRelacion = extremos->first();
+		extremo2 : UmlMm!FinRelacion = extremos->last();
+		extremoDependiente : UmlMm!FinRelacion = extremo1; -- por defecto
+		extremoIndependiente : UmlMm!FinRelacion = extremo2;
+		esquema : ErMm!Esquema = thisModule.resolveTemp(r.diagrama, 'esq');
+		
+		-- Variables específicas para relaciones N:M
+		esRelacionNM         : Boolean = (extremo1.max = -1 and extremo2.max = -1);
+		nombreTablaIntermedia: String = r.nombre + '_Rel';
+		nombreColumna1       : String = extremo1.rol + 'ref' + extremo2.rol;
+		nombreColumna2       : String = extremo2.rol + 'ref' + extremo1.rol;
+		tablaClase1          : ErMm!Tabla = thisModule.lookupTabla(extremo1.clase.nombre, esquema);
+		tablaClase2          : ErMm!Tabla = thisModule.lookupTabla(extremo2.clase.nombre, esquema);
+		
+	}
+	to
+		fk : ErMm!ClaveAjena(
+			nombre <- (extremo1.rol + 'to' + extremo2.rol)
+			.debug('Creando clave ajena'),
+			esquema <- esquema,
+			columna <- loc,
+			referenciada <- thisModule.lookupTabla(extremoIndependiente.clase.nombre, esquema)
+			.columnas->select(c | c.esPrimaria)->first()
+		),
+		-- Columna local de la parte dependiente
+		loc : ErMm!Columna(
+			nombre <- (extremoDependiente.rol + 'ref'
+				+ extremoIndependiente.rol)
+				.debug('Creada columna dependiente'),
+			rango <- extremoDependiente.max, -- cardinalidad máxima
+			esUnico <- extremoDependiente.max = 1,
+			esNulo <- extremoDependiente.min = 0,
+			tipo <- #integer,
+			tabla <- thisModule.lookupTabla(extremoDependiente.clase.nombre, esquema)
+		)
+	do {
+	-- caso 1–1 o 0..1–1
+		if (extremo1.max = 1 and extremo2.max = 1) {
+			if (extremo2.composicion or (extremo2.max = 1 and extremo2.min = 1)) {
+				extremoDependiente <- extremo2;
+				extremoIndependiente <- extremo1;
+			}
+		}
+		-- caso 0/1..* – 0/1..1
+		else if ((extremo1.max = -1 and extremo2.max = 1) or (extremo1.max = 1 and extremo2.max = -1)) {
+			if (extremo2.max = -1) {
+				extremoDependiente <- extremo2;
+				extremoIndependiente <- extremo1;
+			}
+		}
+	}
+}
+
+rule RelacionAFKM2M {
+	from
+	rel : UmlMm!Relacion (rel.finRelacion.first().max.intValue() = -1 and rel.claseasociacion.oclIsUndefined())
+	using{
+		esquema : ErMm!Esquema = thisModule.resolveTemp(rel.diagrama, 'esq');
+	}
+	to
+	tablaRelacion : ErMm!Tabla (
+		nombre <- 'Relacion_' + rel.finRelacion.first().rol + 'con' + rel.finRelacion.last().rol.debug('tabla creada'),
+		columnas <- Sequence{columnaFK1, columnaFK2},
+		esquema <- rel.diagrama
+	),
+	columnaFK1 : ErMm!Columna (
+		nombre <- 'id_FK_' + rel.finRelacion.first().rol,
+		tipo <- #integer,
+		tabla <- tablaRelacion,
+		esPrimaria <- true
+	),
+	columnaFK2 : ErMm!Columna (
+		nombre <- 'id_FK_' + rel.finRelacion.last().rol,
+		tipo <- #integer,
+		tabla <- tablaRelacion,
+		esPrimaria <- true
+	),
+	fk1 : ErMm!ClaveAjena (
+		nombre <- 'FK_' + rel.finRelacion.first().rol,
+		columna <- columnaFK1,
+		referenciada <- thisModule.lookupTabla(rel.finRelacion.first().clase.nombre, esquema)
+		.columnas->select(c | c.esPrimaria)->first(),
+		esquema <- rel.diagrama
+	),
+	fk2 : ErMm!ClaveAjena (
+		nombre <- 'FK_' + rel.finRelacion.last().rol,
+		columna <- columnaFK2,
+		referenciada <- thisModule.lookupTabla(rel.finRelacion.last().clase.nombre, esquema)
+		.columnas->select(c | c.esPrimaria)->first(),
+		esquema <- rel.diagrama
+	)
+}
+
 -- Maneja las clases de asociación creando una tabla con FKs para las dos clases asociadas
-rule ClaseAsociacion_Tabla {
+lazy rule ClaseAsociacion_Tabla {
   from
     ca : UmlMm!ClaseAsociacion
   using {
     -- Esquema de la asociación
-    esquema : ErMm!Esquema = thisModule.resolveTemp(ca.diagrama, 'esq');
+    esquema : ErMm!Esquema = thisModule.resolveTemp(ca.asociacion.diagrama, 'esq');
     clase1 : UmlMm!Clase = ca.asociacion.finRelacion->first().clase;
     clase2 : UmlMm!Clase = ca.asociacion.finRelacion->last().clase;
-    
     -- Tablas para las clases asociadas
-    tabla1 : ErMm!Tabla = thisModule.lookupTabla(ca.diagrama, clase1.nombre);
-    tabla2 : ErMm!Tabla = thisModule.lookupTabla(ca.diagrama, clase2.nombre);
+    tabla1 : ErMm!Tabla = thisModule.lookupTabla(clase1.nombre.debug('a'), esquema);
+    tabla2 : ErMm!Tabla = thisModule.lookupTabla(clase2.nombre, esquema);
     
     -- Columnas ID de las tablas asociadas
-    pk1 : ErMm!Columna = if tabla1 <> OclUndefined then tabla1.columnas->select(c | c.esPrimaria)->first() else OclUndefined endif;
-    pk2 : ErMm!Columna = if tabla2 <> OclUndefined then tabla2.columnas->select(c | c.esPrimaria)->first() else OclUndefined endif;
+    pk1 : ErMm!Columna = tabla1
+						.columnas->select(c | c.esPrimaria)->first();
+    pk2 : ErMm!Columna = tabla2
+						.columnas->select(c | c.esPrimaria)->first();
   }
   to
     -- Tabla de la clase de asociación
